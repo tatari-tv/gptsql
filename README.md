@@ -1,7 +1,6 @@
 # gptsql
 
-Intelligent "psql" database interface that uses the OpenAI LLM to do smart
-things with the database.
+An LLM wrapper around your database connection. Think of it as a "smart" version of the psql cli.
 
 Example:
 

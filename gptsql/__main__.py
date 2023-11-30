@@ -1,32 +1,26 @@
-import os
-import json
-from sqlalchemy import create_engine
-import psycopg2
+import argparse
 from datetime import datetime
-
+import json
+import os
+import psycopg2
 import time
+
 from openai import OpenAI
 import openai
-from prompt_toolkit import PromptSession
+from prompt_toolkit import PromptSession, prompt
 from prompt_toolkit.history import FileHistory
 from halo import Halo
+from sqlalchemy import create_engine
 
 from .func_tools import call_my_function, get_table_list
-from .utils import download_database_schema
 
 ASSISTANT_NAME="GPTSQL"
-client = OpenAI()
 GPT_MODEL3="gpt-3.5-turbo-1106"
 GPT_MODEL4="gpt-4-1106-preview"
 GPT_MODEL=GPT_MODEL4
 #GPT_MODEL="gpt-4-1106-preview"
 
 # Replace these with your specific database credentials
-db_username = os.environ['DBUSER']
-db_password = os.environ['DBPASSWORD']
-db_host = os.environ['DBHOST']
-db_port = 5432
-db_name = os.environ['DBNAME']
 
 class GPTSql:
     FUNCTION_TOOLS = [
@@ -50,6 +44,56 @@ class GPTSql:
     CONFIG_FILE = os.path.expanduser('~/.gptsql')
 
     def __init__(self) -> None:
+        self.load_config()
+
+        args = self.parse_args()
+
+        if 'DBUSER' in self.config and 'DBHOST' in self.config:
+            db_username = self.config['DBUSER']
+            db_password = self.config['DBPASSWORD']
+            db_host = self.config['DBHOST']
+            db_port = int(self.config['DBPORT'])
+            db_name = self.config['DBNAME']
+        else:
+            db_username = args.username or os.environ.get('DBUSER')
+            db_password = args.password or os.environ.get('DBPASSWORD')
+            db_host = args.host or os.environ.get('DBHOST')
+            db_port = args.port or 5432
+            db_name = args.dbname or os.environ.get('DBNAME')
+
+        if db_host is None:
+            connection_good = False
+            while not connection_good:
+                print("Let's setup your database connection...")
+                db_host = prompt("Enter your database host: ")
+                db_username = prompt("Enter your database username: ")
+                db_password = prompt("Enter your database password: ", is_password=True)
+                db_name = prompt("Enter the database name: ")
+                db_port = prompt("Enter your database port (5432): ") or 5432
+                db_port = int(db_port)
+                print("Validating connection info...")
+                try:
+                    pgconn = psycopg2.connect(
+                        f"host={db_host} dbname={db_name} user={db_username} password={db_password}",
+                        connect_timeout=10
+                    )
+                    with pgconn.cursor() as cursor:
+                        cursor.execute("SELECT version();")
+                    connection_good = True
+                except psycopg2.OperationalError as e:
+                    print("Error: ", e)
+                    continue
+                breakpoint()
+                self.config |= {
+                    "DBUSER": db_username,
+                    "DBPASSWORD": db_password,
+                    "DBHOST": db_host,
+                    "DBPORT": db_port,
+                    "DBNAME": db_name
+                }
+
+            self.save_config()
+        
         # PostgreSQL connection string format
         self.connection_string = f'postgresql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}'
 
@@ -58,15 +102,28 @@ class GPTSql:
         self.pgconn = psycopg2.connect(
             f"host={db_host} dbname={db_name} user={db_username} password={db_password}"
         )
-        self.config = {
-            "assistant_id": None,
-            "thread_id": None
-        }
         self.thread = None
-        self.load_config()
-        download_database_schema(self.pgconn)
+
+        api_key = self.config.get('OPENAI_API_KEY') or os.environ.get('OPENAI_API_KEY')
+        if api_key is None:
+            api_key = prompt("Enter your Open AI API key: ")
+            self.save_config("OPENAI_API_KEY", api_key)
+
+        self.oaclient = OpenAI(api_key=api_key)
         self.get_or_create_assistant()
 
+    def parse_args(self):
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument('-help', '--help', action='help', default=argparse.SUPPRESS, help='Show this help message and exit')
+
+        parser.add_argument('-h', '--host', type=str, required=False)
+        parser.add_argument('-p', '--port', type=int, required=False)
+        parser.add_argument('-U', '--username', type=str, required=False)
+        parser.add_argument('-d', '--dbname', type=str, required=False)
+        parser.add_argument('--password', type=str, required=False)
+
+        return parser.parse_args()
+    
     def save_config(self, key=None, value=None):
         if key and value:
             self.config[key] = value
@@ -79,6 +136,7 @@ class GPTSql:
             f.write(json.dumps(self.config))
 
     def load_config(self):
+        self.config = {}
         if os.path.exists(self.CONFIG_FILE):
             with open(self.CONFIG_FILE, 'r') as f:
                 self.config = json.loads(f.read())
@@ -96,18 +154,18 @@ class GPTSql:
         self.assistant = None
         if self.config["assistant_id"] is not None:
             try:
-                self.assistant = client.beta.assistants.retrieve(self.config["assistant_id"])
+                self.assistant = self.oaclient.beta.assistants.retrieve(self.config["assistant_id"])
             except openai.NotFoundError:
                 pass
 
         if self.assistant is None:
-            file = client.files.create(
+            file = self.oaclient.files.create(
                 file=open("schema.csv", "rb"),
                 purpose='assistants'
             )
 
             print("Creating your PSQL assistant")
-            self.assistant = client.beta.assistants.create(
+            self.assistant = self.oaclient.beta.assistants.create(
                 name=ASSISTANT_NAME,
                 instructions="""
 You are an assistant helping with data analysis and to query a postgres database. 
@@ -123,21 +181,20 @@ You should try to answer questions from knowledge retrieval before relying on a 
         session = PromptSession(history=FileHistory(os.path.expanduser('~/.myhistory')))
 
         if self.config["thread_id"] is not None:
-            thread = client.beta.threads.retrieve(self.config["thread_id"])
+            thread = self.oaclient.beta.threads.retrieve(self.config["thread_id"])
         else:
-            thread = client.beta.threads.create()
+            thread = self.oaclient.beta.threads.create()
             self.save_config("thread_id", thread.id)
 
         self.thread = thread
 
-        if self.config["last_run_id"] is not None:
+        if self.config.get("last_run_id") is not None:
             try:
-                client.beta.threads.runs.cancel(thread_id=thread.id, run_id=self.config["last_run_id"])
+                self.oaclient.beta.threads.runs.cancel(thread_id=thread.id, run_id=self.config["last_run_id"])
             except openai.BadRequestError:
                 pass
             
         self.last_message_created_at = self.config.get('last_messsage_time')
-        breakpoint()
         self.table_list = get_table_list(self.engine)
 
         spinner = Halo(text='thinking', spinner='dots')
@@ -159,7 +216,7 @@ new thread - start a new thread
                     continue
                 elif cmd == "new thread":
                     if session.prompt("Do you want to start a new thread (y/n)? ") == "y":
-                        thread = client.beta.threads.create()
+                        thread = self.oaclient.beta.threads.create()
                         self.save_config("thread_id", thread.id)
                         self.thread = thread
                     continue
@@ -174,7 +231,7 @@ new thread - start a new thread
                 return
 
     def display_messages(self, show_all=False):
-            messages = client.beta.threads.messages.list(
+            messages = self.oaclient.beta.threads.messages.list(
                 thread_id=self.thread.id
             )
             for msg in reversed(list(messages)):
@@ -192,12 +249,12 @@ new thread - start a new thread
         self.spinner.start(msg);
     
     def process_command(self, thread, cmd: str):
-        client.beta.threads.messages.create(
+        self.oaclient.beta.threads.messages.create(
             thread_id=thread.id,
             role="user",
             content=cmd
         )
-        runobj = client.beta.threads.runs.create(
+        runobj = self.oaclient.beta.threads.runs.create(
             thread_id=thread.id,
             assistant_id=self.assistant.id
         )
@@ -206,7 +263,7 @@ new thread - start a new thread
         while runobj.status not in ["completed", "expired", "cancelled", "failed"]:
             if runobj.status == "in_progress":
                 # check for new steps
-                run_steps = client.beta.threads.runs.steps.list(
+                run_steps = self.oaclient.beta.threads.runs.steps.list(
                     thread_id=thread.id,
                     run_id=runobj.id
                 )
@@ -237,7 +294,7 @@ new thread - start a new thread
                             "tool_call_id": tool_call.id,
                             "output": res
                         })
-                    client.beta.threads.runs.submit_tool_outputs(
+                    self.oaclient.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=runobj.id,
                         tool_outputs=tool_outputs
@@ -245,7 +302,7 @@ new thread - start a new thread
                 else:
                     print("Unknown action: ", runobj.required_action.type)
             time.sleep(1)
-            runobj = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=runobj.id)
+            runobj = self.oaclient.beta.threads.runs.retrieve(thread_id=thread.id, run_id=runobj.id)
             #print(f"status: {runobj.status}, error: {runobj.last_error}")
 
 
