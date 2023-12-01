@@ -40,6 +40,18 @@ class GPTSql:
                 }
             }
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "show_query_results",
+                "description": "Print the results of the last query",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                }
+            }
+        },
     ]
     CONFIG_FILE = os.path.expanduser('~/.gptsql')
 
@@ -95,6 +107,13 @@ class GPTSql:
             self.save_config()
         
         # PostgreSQL connection string format
+        self.db_config = {
+            'db_username': db_username,
+            'db_password': db_password,
+            'db_host': db_host,
+            'db_port': db_port,
+            'db_name': db_name
+        }
         self.connection_string = f'postgresql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}'
 
         self.engine = create_engine(self.connection_string)
@@ -108,6 +127,16 @@ class GPTSql:
         if api_key is None:
             api_key = prompt("Enter your Open AI API key: ")
             self.save_config("OPENAI_API_KEY", api_key)
+
+        if 'model' not in self.config:
+            print("Which model do you want to use?")
+            print(f"1. {GPT_MODEL3}")
+            print(f"2. {GPT_MODEL4}")
+            choice = prompt("(1 or 2) >")
+            if choice == "1":
+                self.save_config("model", GPT_MODEL3)
+            else:
+                self.save_config("model", GPT_MODEL4)
 
         self.oaclient = OpenAI(api_key=api_key)
         self.get_or_create_assistant()
@@ -159,21 +188,21 @@ class GPTSql:
                 pass
 
         if self.assistant is None:
-            file = self.oaclient.files.create(
-                file=open("schema.csv", "rb"),
-                purpose='assistants'
-            )
+            # My attempt to use RAG to pre-populate the db schema never really worked
+            # file = self.oaclient.files.create(
+            #     file=open("schema.csv", "rb"),
+            #     purpose='assistants'
+            # )
 
             print("Creating your PSQL assistant")
             self.assistant = self.oaclient.beta.assistants.create(
                 name=ASSISTANT_NAME,
                 instructions="""
 You are an assistant helping with data analysis and to query a postgres database. 
-You should try to answer questions from knowledge retrieval before relying on a function call.
+For any requst to print query results you can use the function `show_query_results()`.
 """,
                 tools=[{"type": "code_interpreter"},{"type": "retrieval"}] + self.FUNCTION_TOOLS,
-                model=GPT_MODEL,
-                file_ids=[file.id]
+                model=GPT_MODEL
             )   
             self.save_config("assistant_id", self.assistant.id)
 
@@ -200,18 +229,28 @@ You should try to answer questions from knowledge retrieval before relying on a 
         spinner = Halo(text='thinking', spinner='dots')
         self.spinner = spinner
 
+        print("""
+Welcome to GPTSQL, the chat interface to your Postgres database.
+You can ask questions like:
+    "help" (show some system commands)
+    "show all the tables"
+    "show me the first 10 rows of the users table"
+    "show me the schema for the orders table"
+        """)
         while True:
             try:
                 cmd = session.prompt("> ")
                 if cmd == "":
-                    return
+                    continue
                 elif cmd == "history":
                     self.display_messages(show_all=True)
                     continue
                 elif cmd == "help":
                     print("""
+connection - show the database connection info
 history - show the complete message history
 new thread - start a new thread
+exit
                           """)
                     continue
                 elif cmd == "new thread":
@@ -220,6 +259,12 @@ new thread - start a new thread
                         self.save_config("thread_id", thread.id)
                         self.thread = thread
                     continue
+                elif cmd == "connection":
+                    print(f"Host: {self.db_config['db_host']}, Database: {self.db_config['db_name']}, User: {self.db_config['db_username']}")
+                    print(f"Model: {self.config['model']}")
+                    continue
+                elif cmd == "exit":
+                    return
 
                 cmd = "This list of tables in the database:\n" + ",".join(self.table_list) + "\n----\n" + cmd
                 spinner.start("thinking...")
@@ -271,20 +316,14 @@ new thread - start a new thread
                 if len(run_steps) > last_step_count:
                     for step in run_steps[last_step_count:]:
                         for step_detail in step.step_details:
-                            #if step_detail[0] in ['tool_calls','message_creation','type']:
-                            #    continue
                             if step_detail[0] == 'tool_calls':
                                 for tool_call in step_detail[1]:
                                     if 'Function' in str(type(tool_call)):
                                         self.log(f"  --> {tool_call.function.name}()")
                                     elif 'Code' in str(type(tool_call)):
                                         self.log(f"  [code] {tool_call.code_interpreter.input}")
-                            #self.spinner.stop()
-                            #breakpoint()
-                            #pass
                 last_step_count = len(run_steps)
             elif runobj.status == "requires_action":
-                #print("--> ", runobj.status)
                 # Run any functions that the assistant has requested
                 if runobj.required_action.type == "submit_tool_outputs":
                     tool_outputs = []
@@ -303,7 +342,6 @@ new thread - start a new thread
                     print("Unknown action: ", runobj.required_action.type)
             time.sleep(1)
             runobj = self.oaclient.beta.threads.runs.retrieve(thread_id=thread.id, run_id=runobj.id)
-            #print(f"status: {runobj.status}, error: {runobj.last_error}")
 
 
 def main():

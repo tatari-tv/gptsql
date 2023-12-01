@@ -1,50 +1,57 @@
 import os
 import csv
+from sqlalchemy import text
+from tabulate import tabulate
 
-def download_companies():
-    query = """
-    SELECT DISTINCT ON (companies.name)
-           companies.name || '-' || cast(companies.id as VARCHAR) as name, 
-           companies.id,
-           product_description, 
-           landing_pages.landing_page_url
-    FROM companies 
-    INNER JOIN landing_pages 
-    ON companies.id = landing_pages.company_id
-    WHERE industry IS NOT NULL
-    ORDER BY companies.name, LENGTH(landing_pages.landing_page_url)
-    LIMIT 2;
-    """
+# Currently none of these functions are used.
 
-    df = pd.read_sql_query(query, engine)
-    print(df)
-    return df
+def more_functions(engine, name, fargs):
+    if name == "list_schemas":
+        with engine.connect() as connection:
+            rows = connection.execute(text("SELECT schema_name FROM information_schema.schemata"))
+        return [row[0] for row in rows]
 
-def download_campaigns(company_id):
-    pass
+    elif name == "list_tables":
+        schema = fargs.get("schema", "public")
+        sql = f"""
+            SELECT table_schema, table_name
+            --, pg_size_pretty(total_bytes) AS total, to_char(row_estimate, 'FM999,999,999,999') as rows
+            FROM (
+            SELECT *, total_bytes-index_bytes-coalesce(toast_bytes,0) AS table_bytes FROM (
+                SELECT c.oid,nspname AS table_schema, relname AS table_name
+                        , c.reltuples AS row_estimate
+                        , pg_total_relation_size(c.oid) AS total_bytes
+                        , pg_indexes_size(c.oid) AS index_bytes
+                        , pg_total_relation_size(reltoastrelid) AS toast_bytes
+                    FROM pg_class c
+                    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE relkind = 'r' and nspname='{schema}'
+            ) a order by table_bytes desc
+            ) a;
+        """
+        with engine.connect() as connection:
+            rows = connection.execute(text(sql))
+        cols = ['schema', 'table'] #, 'size', 'rows'
+        return(tabulate(list(rows), headers=[cols]))
+    elif name == "get_table_schema":
+        schema = fargs.get("schema", "public")
+        table = fargs.get("table")
+        sql = f"""
+            SELECT 
+                column_name, 
+                data_type 
+            FROM 
+                information_schema.columns 
+            WHERE 
+                table_schema = '{schema}' and table_name='{table}';
+        """
+        with engine.connect() as connection:
+            rows = connection.execute(text(sql))
+        cols = ['column', 'type']
+        return(tabulate(list(rows), headers=[cols]))
 
-def enrich_companies(df):
-    # Takes our list of companies+landing pages and as ChatGPT to summarize the
-    # company for us. 
-    for row in df.itertuples():
-        # This code is for v1 of the openai package: pypi.org/project/openai
-        print(row)
-        print("Asking ChatGPT for context")
-        response = client.chat.completions.create(
-          model=GPT_MODEL,
-          messages=[
-            {
-              "role": "user",
-              "content": f"Browse this website and generate a description of the company and its products: {row.landing_page_url}."
-            }
-          ],
-          temperature=1,
-          max_tokens=256,
-          top_p=1,
-          frequency_penalty=0,
-          presence_penalty=0
-        )
-        print(response.choices[0].message.content)
+# This was an attempt to collect the database schema and make it available
+# via RAG to the LLM. But none of my experiments with that worked very well.
 
 def download_database_schema(pg_connection):
     if not os.path.exists('./schema.md'):
@@ -71,5 +78,3 @@ def download_database_schema(pg_connection):
                             md.write("|" + ("|".join(["------" for col in row])) +"|\n")
                             continue
                         md.write("|" + ("|".join(row)) + "|\n")
-
-
