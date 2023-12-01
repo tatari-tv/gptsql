@@ -5,20 +5,28 @@ An LLM-powered chat interface to your database. The tool understands postgres sy
 Example:
 
 ```
-gptsql
-> show me the schemas
-thinking...
-Running select query: SELECT schema_name FROM information_schema.schemata;
-processing the function response...
-Here are the schemas in your database:
+(gptsql-py3.9) (base) scottp@ltm-1950 gptsql % gptsql
 
-1. pg_catalog
-2. information_schema
-3. analytics
-4. public
-5. aws_commons
-6. bi_staging
-7. rds_tools
+Welcome to GPTSQL, the chat interface to your Postgres database.
+You can ask questions like:
+    "help - show some system commands"
+    "show all the tables"
+    "show me the first 10 rows of the users table"
+    "show me the schema for the orders table"
+        
+> show me the available schemas
+ --> run_sql_command()  Running select query: SELECT schema_name FROM information_schema.schemata ORDER BY schema_name;
+[assistant] --> The available schemas in the database are:
+
+1. hr
+2. humanresources
+3. information_schema
+4. pe
+5. person
+6. pg_catalog
+7. pg_toast
+8. pr
+9. production
 ```
 
 Show tables matching a string:
@@ -214,3 +222,5 @@ If you want to change the LLM model you can edit the assistant via the OpenAI we
 The biggest limitation is that the LLM is **slooooowwww**. In my testing it can easily take 20-30 seconds of "thinking" before the LLM responds. One reason is that the LLM runs once when you issue your question, and then it runs again to process any results returned from the functions. 
 
 It is also the case the the Assistants API will run multiple "steps" to process your question, even though we don't get a lot of feedback when this is happening.
+
+One other thing: the tool is **expensive** :). I ran up a bill of about $100 just doing development. It is recommnded to stick with the **GPT3** model if you want to keep your costs down.
