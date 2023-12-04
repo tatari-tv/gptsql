@@ -4,6 +4,7 @@ import json
 import os
 import psycopg2
 import time
+import toml
 
 from openai import OpenAI
 import openai
@@ -177,6 +178,10 @@ class GPTSql:
             except:
                 pass
 
+    def get_version(self):
+        pyproject = toml.load("pyproject.toml")
+        return pyproject["tool"]["poetry"]["version"]
+
     def get_or_create_assistant(self):
         # Create or retriveve our Assistant. We also upload the schema file
         # for RAG uses by the assistant.
@@ -239,7 +244,7 @@ You can ask questions like:
         """)
         while True:
             try:
-                cmd = session.prompt("> ")
+                cmd = session.prompt("\n> ")
                 if cmd == "":
                     continue
                 elif cmd == "history":
@@ -262,6 +267,7 @@ exit
                 elif cmd == "connection":
                     print(f"Host: {self.db_config['db_host']}, Database: {self.db_config['db_name']}, User: {self.db_config['db_username']}")
                     print(f"Model: {self.config['model']}")
+                    print(f"Version: {self.get_version()}")
                     continue
                 elif cmd == "exit":
                     return
@@ -313,6 +319,8 @@ exit
                     run_id=runobj.id
                 )
                 run_steps = list(run_steps)
+                #print(run_steps)
+                #print("\n\n")
                 if len(run_steps) > last_step_count:
                     for step in run_steps[last_step_count:]:
                         for step_detail in step.step_details:
@@ -338,6 +346,7 @@ exit
                         run_id=runobj.id,
                         tool_outputs=tool_outputs
                     )
+                    self.spinner.text = "considering results..."
                 else:
                     print("Unknown action: ", runobj.required_action.type)
             time.sleep(1)
