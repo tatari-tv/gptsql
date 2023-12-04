@@ -179,7 +179,7 @@ class GPTSql:
                 pass
 
     def get_version(self):
-        pyproject = toml.load("pyproject.toml")
+        pyproject = toml.load(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"))
         return pyproject["tool"]["poetry"]["version"]
 
     def get_or_create_assistant(self):
