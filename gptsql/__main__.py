@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+import importlib.metadata
 import json
 import os
 import psycopg2
@@ -179,8 +180,11 @@ class GPTSql:
                 pass
 
     def get_version(self):
-        pyproject = toml.load(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"))
-        return pyproject["tool"]["poetry"]["version"]
+        try:
+            pyproject = toml.load(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"))
+            return pyproject["tool"]["poetry"]["version"]
+        except:
+            return importlib.metadata.version("gptsql")
 
     def get_or_create_assistant(self):
         # Create or retriveve our Assistant. We also upload the schema file
