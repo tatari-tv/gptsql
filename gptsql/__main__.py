@@ -186,7 +186,7 @@ class GPTSql:
         # Create or retriveve our Assistant. We also upload the schema file
         # for RAG uses by the assistant.
         self.assistant = None
-        if self.config["assistant_id"] is not None:
+        if self.config.get("assistant_id") is not None:
             try:
                 self.assistant = self.oaclient.beta.assistants.retrieve(self.config["assistant_id"])
             except openai.NotFoundError:
@@ -214,7 +214,7 @@ For any requst to print query results you can use the function `show_query_resul
     def chat_loop(self):
         session = PromptSession(history=FileHistory(os.path.expanduser('~/.myhistory')))
 
-        if self.config["thread_id"] is not None:
+        if self.config.get("thread_id") is not None:
             thread = self.oaclient.beta.threads.retrieve(self.config["thread_id"])
         else:
             thread = self.oaclient.beta.threads.create()
