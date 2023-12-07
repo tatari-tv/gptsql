@@ -1,32 +1,57 @@
 # gptsql
 
-An LLM-powered chat interface to your database. The tool understands postgres syntax and can easily translate English queries into propery SQL queries. Because of the wide training of the LLM model it can also infer relevant information about the structure and meaning of your tables and data.
+An LLM-powered chat interface to your database. This tool understands Postgres syntax and can easily translate English queries into proper SQL queries. Because of the wide training of the LLM model it can also infer relevant information about the structure and meaning of your tables and data. Uses an [Open AI](https://openai.com) model via the [Assistant API](https://platform.openai.com/docs/assistants/overview).
 
-Example:
+There are lots of tools around to enable "chat with your data" (mostly based on the [RAG](https://research.ibm.com/blog/retrieval-augmented-generation-RAG) architecture), but this is actually the quickest way to enable LLM chat with your data - no preparation is needed.
+
+## Installation
+
+You will need:
+
+1. credentials for your database
+2. an OpenAI [API Key](https://platform.openai.com/account/api-keys) from your OpenAI account.
+
+then
 
 ```
-(gptsql-py3.9) (base) scottp@ltm-1950 gptsql % gptsql
+pip install gptsql
+```
+
+or download the source. 
+
+Run the CLI with:
+
+    gptsql
+
+or use `python -m gptsql` to run from source.
+
+## What can it do?
+
+Then Open AI model understands most Postgres syntax, so it can generate both generic SQL commands as well as very Postgres-specific ones like querying system settings.
+
+The LLM is also good at analyzing tables, understanding what they are likely used for, and inferring relationships between tables. It is quite good at writing JOINs between tables without explicit instruction.
+
+It can write queries to group and summarize results.
+
+By virtue of the Assistant API, it can also write multi-step queries and combine the results of queries together. It is also maintaining a history of the chat, so you can easily ask follow up questions like "now summarize by month" that refer back to prior queries.
+
+At the moment the tool limits to only SELECT queries and does not allow mutations (but see the [SAFETY](#safety) section for details).
+
+## Chat examples
+
+```
+% gptsql
 
 Welcome to GPTSQL, the chat interface to your Postgres database.
-You can ask questions like:
-    "help - show some system commands"
-    "show all the tables"
-    "show me the first 10 rows of the users table"
-    "show me the schema for the orders table"
         
 > show me the available schemas
- --> run_sql_command()  Running select query: SELECT schema_name FROM information_schema.schemata ORDER BY schema_name;
+⠋ thinking...  Running select query: SELECT schema_name FROM information_schema.schemata ORDER BY schema_name;
 [assistant] --> The available schemas in the database are:
 
-1. hr
-2. humanresources
-3. information_schema
-4. pe
-5. person
-6. pg_catalog
-7. pg_toast
-8. pr
-9. production
+1. information_schema
+2. pg_catalog
+3. pg_toast
+4. public
 ```
 
 Show tables matching a string:
@@ -151,22 +176,6 @@ LIMIT 10;
 These sizes are in bytes, and the tables are listed in decreasing order of their size on disk.
 ```
 
-## Getting started
-
-You need credentials for your database, and you will need an OpenAI **API Key** from your OpenAI account.
-
-Installation:
-
-    pip install gptsql
-
-or download the source. 
-
-Run the CLI with:
-
-    gptsql
-
-or use `python -m gptsql` to run from source.
-
 ### Configuration
 
 You can configure the database connection either using `psql` style command line arguments
@@ -180,13 +189,21 @@ file if you want to start over.
         
 ## How it works
 
-Gptsql uses the OpenAI Assistants API to create an intelligent assistant to work with your database.
+`gptsql` uses the OpenAI Assistants API to create an intelligent assistant to work with your database.
 The key to accessing the database is providing a function _tool_ to the assistant. Amazingly
 only a single function is required:
 
-    run_sql_command - Execute any SQL command against the Postgres datbase
+```json
+        {
+            "type": "function",
+            "function": {
+                "name": "run_sql_command",
+                "description": "Execute any SQL command against the Postgres datbase",
+            }
+        }
+```
 
-When requested the LLM automatically generates the right SQL and calls this function to execute it.
+When requested the LLM automatically generates the right SQL and calls this function to execute it. The query results are then returned to the Assistant where it can decide to print or summarize the results. 
 
 If the LLM needs to know about your tables it will just execute SQL commands against the
 `information schema` to extract it. 
@@ -195,11 +212,13 @@ Since table reference is so common, we help the assistant by pre-emptively injec
 list into the LLM prompt.
 
 Because of the LLM context limits, you won't always be able to see all the rows returned from a query.
-So we provide a second function tool, "show_query_results" which can print up to 200 rows resulting from
+So we provide a second function tool, `show_query_results` which can print up to 200 rows resulting from
 the last query. Sometimes the assistant is smart enough to call this function by itself, but other times
 you may have to request "print results" to see all the result rows.
 
 ### Command Reference
+
+There are a few system commands supported for meta operations: 
 
 `help` - show system commands
 
@@ -216,6 +235,8 @@ If you want to change the LLM model you can edit the assistant via the OpenAI we
 ## SAFETY
 
 **Please do not run this against a production database!** And **make sure you have a backup** of your data. That said, the query function has a simple protector which will refuse to run any query that doesn't start with `SELECT`. Note that this is not foolproof. It is very likely that the LLM can construct a destructive query which will get around this simple check, if you ask it properly. So don't rely on this for perfect safety. I strongly recommend running with a `read-only` db connection just in case.
+
+Also please note that this tool **sends your data to OpenAI**. Query results are sent back to Assistant API for processing. Please make your own decision on whether you are OK with this or not.
 
 ## Limitations
 

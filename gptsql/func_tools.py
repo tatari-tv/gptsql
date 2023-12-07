@@ -12,7 +12,7 @@ def call_my_function(engine, name, fargs = {}):
         query = fargs.get("query")
         if query and query.lower().startswith("select"):
             query = query.replace('%', '%%')
-            print(colored(f"  Running select query: {query}", "blue"))
+            print(colored(query, "blue"))
             try:
                 # convert DataFrame to json
                 last_results = pd.read_sql_query(query, engine)

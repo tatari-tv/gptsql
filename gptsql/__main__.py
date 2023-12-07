@@ -97,7 +97,6 @@ class GPTSql:
                 except psycopg2.OperationalError as e:
                     print("Error: ", e)
                     continue
-                breakpoint()
                 self.config |= {
                     "DBUSER": db_username,
                     "DBPASSWORD": db_password,
@@ -127,7 +126,7 @@ class GPTSql:
 
         api_key = self.config.get('OPENAI_API_KEY') or os.environ.get('OPENAI_API_KEY')
         if api_key is None:
-            api_key = prompt("Enter your Open AI API key: ")
+            api_key = prompt("Enter your Open AI API key: ", is_password=True)
             self.save_config("OPENAI_API_KEY", api_key)
 
         if 'model' not in self.config:
@@ -330,9 +329,9 @@ exit
                         for step_detail in step.step_details:
                             if step_detail[0] == 'tool_calls':
                                 for tool_call in step_detail[1]:
-                                    if 'Function' in str(type(tool_call)):
-                                        self.log(f"  --> {tool_call.function.name}()")
-                                    elif 'Code' in str(type(tool_call)):
+                                    #if 'Function' in str(type(tool_call)):
+                                    #    self.log(f"  --> {tool_call.function.name}()")
+                                    if 'Code' in str(type(tool_call)):
                                         self.log(f"  [code] {tool_call.code_interpreter.input}")
                 last_step_count = len(run_steps)
             elif runobj.status == "requires_action":
@@ -340,6 +339,7 @@ exit
                 if runobj.required_action.type == "submit_tool_outputs":
                     tool_outputs = []
                     for tool_call in runobj.required_action.submit_tool_outputs.tool_calls:
+                        self.log(f"  --> {tool_call.function.name}()")
                         res = str(call_my_function(self.engine, tool_call.function.name, json.loads(tool_call.function.arguments)))
                         tool_outputs.append({
                             "tool_call_id": tool_call.id,
