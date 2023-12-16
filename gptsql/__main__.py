@@ -45,8 +45,8 @@ class GPTSql:
         {
             "type": "function",
             "function": {
-                "name": "show_query_results",
-                "description": "Print the results of the last query",
+                "name": "show_long_query_results_on_demand",
+                "description": "Only call this function if the user requests to 'print all results'",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -196,21 +196,14 @@ class GPTSql:
                 pass
 
         if self.assistant is None:
-            # My attempt to use RAG to pre-populate the db schema never really worked
-            # file = self.oaclient.files.create(
-            #     file=open("schema.csv", "rb"),
-            #     purpose='assistants'
-            # )
-
             print("Creating your PSQL assistant")
             self.assistant = self.oaclient.beta.assistants.create(
                 name=ASSISTANT_NAME,
                 instructions="""
 You are an assistant helping with data analysis and to query a postgres database. 
-For any requst to print query results you can use the function `show_query_results()`.
 """,
                 tools=[{"type": "code_interpreter"},{"type": "retrieval"}] + self.FUNCTION_TOOLS,
-                model=GPT_MODEL
+                model=self.config['model']
             )   
             self.save_config("assistant_id", self.assistant.id)
 
@@ -269,13 +262,13 @@ exit
                     continue
                 elif cmd == "connection":
                     print(f"Host: {self.db_config['db_host']}, Database: {self.db_config['db_name']}, User: {self.db_config['db_username']}")
-                    print(f"Model: {self.config['model']}")
+                    print(f"Model: {self.assistant.model}")
                     print(f"Version: {self.get_version()}")
                     continue
                 elif cmd == "exit":
                     return
 
-                cmd = "This list of tables in the database:\n" + ",".join(self.table_list) + "\n----\n" + cmd
+                cmd = "These are the tables in the database:\n" + ",".join(self.table_list) + "\n----\n" + cmd
                 spinner.start("thinking...")
                 self.process_command(thread, cmd)
                 spinner.stop()
@@ -301,6 +294,7 @@ exit
 
     def log(self, msg):
         self.spinner.start(msg);
+        #print(msg)
     
     def process_command(self, thread, cmd: str):
         self.oaclient.beta.threads.messages.create(

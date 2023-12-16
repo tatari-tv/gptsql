@@ -25,9 +25,8 @@ def call_my_function(engine, name, fargs = {}):
                 return {"error", f" Database query failed: {e}"}
         else:
             print("Invalid query: ", query)
-            breakpoint()
             return {"error": f"Failed to run non-select query '{query}'"}
-    elif name == "show_query_results":
+    elif name == "show_long_query_results_on_demand":
         if last_results is None:
             print("No results to show")
         else:
