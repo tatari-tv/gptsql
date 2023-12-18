@@ -4,6 +4,12 @@ An LLM-powered chat interface to your database. This tool understands Postgres s
 
 There are lots of tools around to enable "chat with your data" (mostly based on the [RAG](https://research.ibm.com/blog/retrieval-augmented-generation-RAG) architecture), but this is actually the quickest way to enable LLM chat with your data - no preparation is needed.
 
+
+Here's a quick demo showing natural language queries about the [IMDB](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/2QYZBT) movie database:
+
+https://github.com/tatari-tv/gptsql/assets/80947/110c0a61-f344-4f45-94d4-023a4f6bb90d
+
+
 ## Installation
 
 You will need:
