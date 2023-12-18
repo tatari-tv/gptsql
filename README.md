@@ -5,7 +5,7 @@ An LLM-powered chat interface to your database. This tool understands Postgres s
 There are lots of tools around to enable "chat with your data" (mostly based on the [RAG](https://research.ibm.com/blog/retrieval-augmented-generation-RAG) architecture), but this is actually the quickest way to enable LLM chat with your data - no preparation is needed.
 
 
-Here's a quick demo showing natural language queries about the [IMDB](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/2QYZBT) movie database:
+Here's a quick demo showing natural language queries about the [IMDB](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/2QYZBT) movie database. You can even see the Assistant encounter SQL errors and then correct itself:
 
 https://github.com/tatari-tv/gptsql/assets/80947/110c0a61-f344-4f45-94d4-023a4f6bb90d
 
@@ -195,7 +195,7 @@ file if you want to start over.
         
 ## How it works
 
-`gptsql` uses the OpenAI Assistants API to create an intelligent assistant to work with your database.
+`gptsql` uses the OpenAI [Assistants API](https://platform.openai.com/docs/assistants/overview) to create an intelligent assistant to work with your database.
 The key to accessing the database is providing a function _tool_ to the assistant. Amazingly
 only a single function is required:
 
