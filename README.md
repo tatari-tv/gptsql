@@ -7,7 +7,11 @@ There are lots of tools around to enable "chat with your data" (mostly based on 
 
 Here's a quick demo showing natural language queries about the [IMDB](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/2QYZBT) movie database. You can even see the Assistant encounter SQL errors and then correct itself:
 
-https://github.com/tatari-tv/gptsql/assets/80947/110c0a61-f344-4f45-94d4-023a4f6bb90d
+
+
+https://github.com/tatari-tv/gptsql/assets/80947/7e946bdd-1ed9-4a03-9dc1-aca8d3a44926
+
+
 
 
 ## Installation
