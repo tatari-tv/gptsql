@@ -221,7 +221,7 @@ You are an assistant helping with data analysis and to query a postgres database
         if self.config.get("last_run_id") is not None:
             try:
                 self.oaclient.beta.threads.runs.cancel(thread_id=thread.id, run_id=self.config["last_run_id"])
-            except openai.BadRequestError:
+            except(openai.BadRequestError, openai.NotFoundError):
                 pass
             
         self.last_message_created_at = self.config.get('last_messsage_time')
