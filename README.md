@@ -47,6 +47,8 @@ By virtue of the Assistant API, it can also write multi-step queries and combine
 
 At the moment the tool limits to only SELECT queries and does not allow mutations (but see the [SAFETY](#safety) section for details).
 
+I wrote a more detailed background about the project on my blog: https://scottpersinger.com/2023/12/07/build-an-openai-assistant-to-chat-with-your-postgres-database/.
+
 ## Chat examples
 
 ```
